@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Developer Quest & Portfolio</title>
+  <style>
+    :root {
+      --bg-color: #0f172a;
+      --card-bg: #1e293b;
+      --accent: #38bdf8;
+      --accent-green: #22c55e;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    /* Cyberpunk Theme */
+    [data-theme="cyberpunk"] {
+      --bg-color: #0d0221;
+      --card-bg: #261447;
+      --accent: #ff007f;
+      --accent-green: #00f6ff;
+      --text-main: #ffffff;
+      --text-muted: #d670ff;
+    }
+
+    /* GameBoy Theme */
+    [data-theme="gameboy"] {
+      --bg-color: #8b956d;
+      --card-bg: #9bbc0f;
+      --accent: #0f380f;
+      --accent-green: #306230;
+      --text-main: #0f380f;
+      --text-muted: #306230;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Courier New', Courier, monospace; }
+    body { background-color: var(--bg-color); color: var(--text-main); padding-top: 50px; transition: all 0.3s; }
+
+    /* --- XP BAR --- */
+    #xp-header {
+      position: fixed; top: 0; left: 0; width: 100%; height: 40px;
+      background: #020617; border-bottom: 2px solid var(--accent);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 16px; z-index: 1000; font-weight: bold;
+    }
+    .xp-track {
+      flex-grow: 1; margin: 0 15px; height: 12px;
+      background: #334155; border-radius: 6px; overflow: hidden;
+    }
+    #xp-progress {
+      height: 100%; width: 0%; background: var(--accent-green);
+      transition: width 0.2s ease-out;
+    }
+
+    /* --- LAYOUT & CARDS --- */
+    .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+    h1, h2 { margin-bottom: 15px; color: var(--accent); }
+    section { margin-bottom: 40px; background: var(--card-bg); padding: 20px; border-radius: 8px; position: relative; }
+
+    /* --- SKILL TREE --- */
+    .skill-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+    .skill-node {
+      background: rgba(255,255,255,0.05); border: 1px solid var(--accent);
+      padding: 8px 14px; border-radius: 20px; cursor: pointer; user-select: none;
+      transition: transform 0.2s, background 0.2s;
+    }
+    .skill-node:hover { transform: scale(1.05); background: var(--accent); color: #000; }
+
+    /* --- QUEST LOG (PROJECTS) --- */
+    .quest-card {
+      border-left: 4px solid var(--accent); background: rgba(0,0,0,0.2);
+      padding: 15px; margin-bottom: 15px; border-radius: 0 8px 8px 0;
+    }
+    .quest-btn {
+      margin-top: 10px; background: var(--accent-green); color: #000;
+      border: none; padding: 6px 12px; font-weight: bold; cursor: pointer; border-radius: 4px;
+    }
+
+    /* --- COLLECTIBLES --- */
+    .coin {
+      display: inline-block; width: 20px; height: 20px; background: #eab308;
+      border-radius: 50%; border: 2px solid #fef08a; cursor: pointer;
+      text-align: center; line-height: 16px; font-size: 10px; color: #000;
+      animation: bounce 1.5s infinite; position: absolute;
+    }
+    @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+
+    /* --- TERMINAL OVERLAY --- */
+    #terminal-modal {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.85); z-index: 2000; align-items: center; justify-content: center;
+    }
+    .terminal {
+      width: 90%; max-width: 600px; height: 350px; background: #050505;
+      border: 2px solid var(--accent-green); border-radius: 6px; padding: 15px;
+      color: var(--accent-green); overflow-y: auto; display: flex; flex-direction: column;
+    }
+    .terminal-output { flex-grow: 1; overflow-y: auto; margin-bottom: 10px; white-space: pre-wrap; }
+    .terminal-input-line { display: flex; gap: 8px; }
+    .terminal-input-line input {
+      flex-grow: 1; background: transparent; border: none; color: var(--accent-green);
+      outline: none; font-size: 16px;
+    }
+
+    /* --- TOAST NOTIFICATION --- */
+    #toast {
+      position: fixed; bottom: 20px; right: 20px; background: var(--accent-green);
+      color: #000; padding: 10px 18px; border-radius: 6px; font-weight: bold;
+      transform: translateY(100px); opacity: 0; transition: all 0.3s ease; z-index: 3000;
+    }
+    #toast.show { transform: translateY(0); opacity: 1; }
+
+    .term-toggle {
+      position: fixed; bottom: 20px; left: 20px; background: var(--accent);
+      color: #000; border: none; padding: 10px 14px; font-weight: bold;
+      border-radius: 50px; cursor: pointer; z-index: 1000;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- XP Header Bar -->
+  <div id="xp-header">
+    <span>LVL <span id="lvl">1</span></span>
+    <div class="xp-track"><div id="xp-progress"></div></div>
+    <span><span id="xp-val">0</span> / 100 XP</span>
+  </div>
+
+  <div class="container">
+    <!-- Hero / Intro -->
+    <section>
+      <h1>👾 Welcome, Adventurer!</h1>
+      <p>Scroll down, complete quests, find hidden coins, and interact with the developer tree to earn XP.</p>
+      <!-- Hidden Coin 1 -->
+      <span class="coin" style="top: 10px; right: 20px;" onclick="collectCoin(this)">★</span>
+    </section>
+
+    <!-- Skill Tree -->
+    <section>
+      <h2>⚡ RPG Skill Tree</h2>
+      <p>Click skills to inspect stats and gain XP:</p>
+      <div class="skill-grid">
+        <div class="skill-node" onclick="gainXP(15, 'HTML5 / CSS3 Skill Unlocked!')">HTML/CSS [Lvl Max]</div>
+        <div class="skill-node" onclick="gainXP(20, 'JavaScript Mastery +20 XP')">JavaScript [Lvl 85]</div>
+        <div class="skill-node" onclick="gainXP(25, 'React Power Up +25 XP')">React.js [Lvl 70]</div>
+        <div class="skill-node" onclick="gainXP(20, 'Node.js Backend Skill Activated!')">Node.js [Lvl 65]</div>
+        <div class="skill-node" onclick="gainXP(30, 'Git Mastery +30 XP')">Git & GitHub [Lvl 90]</div>
+      </div>
+    </section>
+
+    <!-- Quests / Projects -->
+    <section>
+      <h2>🗡️ Active Quests (Projects)</h2>
+      
+      <div class="quest-card">
+        <h3>Quest #1: Interactive Web Portfolio</h3>
+        <p>A gamified responsive portfolio featuring retro themes and easter eggs.</p>
+        <button class="quest-btn" onclick="completeQuest(this, 50)">Complete Quest (+50 XP)</button>
+      </div>
+
+      <div class="quest-card">
+        <h3>Quest #2: Full-Stack Web App</h3>
+        <p>Built with Node.js and MongoDB to manage user tasks and workflows.</p>
+        <button class="quest-btn" onclick="completeQuest(this, 50)">Complete Quest (+50 XP)</button>
+        <!-- Hidden Coin 2 -->
+        <span class="coin" style="bottom: 10px; right: 10px;" onclick="collectCoin(this)">★</span>
+      </div>
+    </section>
+  </div>
+
+  <!-- Terminal Button & Modal -->
+  <button class="term-toggle" onclick="toggleTerminal()">>_ CLI (Ctrl+K)</button>
+
+  <div id="terminal-modal">
+    <div class="terminal">
+      <div class="terminal-output" id="term-out">Type 'help' to see available commands...</div>
+      <div class="terminal-input-line">
+        <span>></span>
+        <input type="text" id="term-in" autofocus />
+      </div>
+    </div>
+  </div>
+
+  <!-- Notification Toast -->
+  <div id="toast">Achievement Unlocked!</div>
+
+  <script>
+    // --- GAMIFICATION STATE ---
+    let xp = 0;
+    let level = 1;
+    let coinsFound = 0;
+
+    function gainXP(amount, message) {
+      xp += amount;
+      if (xp >= level * 100) {
+        level++;
+        showToast(`🎉 LEVEL UP! You reached Level ${level}!`);
+      } else if (message) {
+        showToast(message);
+      }
+      updateUI();
+    }
+
+    function updateUI() {
+      document.getElementById('xp-val').innerText = xp;
+      document.getElementById('lvl').innerText = level;
+      const progressPercent = Math.min((xp % 100), 100);
+      document.getElementById('xp-progress').style.width = progressPercent + '%';
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      toast.innerText = msg;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2500);
+    }
+
+    function completeQuest(btn, xpReward) {
+      if (!btn.disabled) {
+        btn.disabled = true;
+        btn.innerText = '✓ Quest Cleared!';
+        btn.style.background = '#64748b';
+        gainXP(xpReward, `⚔️ Quest Cleared! +${xpReward} XP`);
+      }
+    }
+
+    function collectCoin(coinEl) {
+      coinEl.style.display = 'none';
+      coinsFound++;
+      gainXP(30, `🪙 Found Hidden Coin (${coinsFound}/2)! +30 XP`);
+      if (coinsFound === 2) {
+        setTimeout(() => {
+          document.body.setAttribute('data-theme', 'cyberpunk');
+          showToast('🎨 Secret Unlocked: Cyberpunk Theme Activated!');
+        }, 1000);
+      }
+    }
+
+    // --- TERMINAL CLI ---
+    function toggleTerminal() {
+      const modal = document.getElementById('terminal-modal');
+      modal.style.display = modal.style.display === 'flex' ? 'none' : 'flex';
+      if (modal.style.display === 'flex') {
+        document.getElementById('term-in').focus();
+      }
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        toggleTerminal();
+      }
+    });
+
+    document.getElementById('term-in').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const input = e.target.value.trim().toLowerCase();
+        const out = document.getElementById('term-out');
+        e.target.value = '';
+
+        out.innerText += `\n> ${input}`;
+
+        if (input === 'help') {
+          out.innerText += `\nAvailable commands: help, skills, theme cyberpunk, theme gameboy, theme default, clear`;
+        } else if (input === 'skills') {
+          out.innerText += `\nSkills: HTML/CSS, JavaScript, React, Node.js, Git`;
+        } else if (input.startsWith('theme ')) {
+          const theme = input.split(' ')[1];
+          document.body.setAttribute('data-theme', theme);
+          out.innerText += `\nTheme changed to ${theme}!`;
+        } else if (input === 'clear') {
+          out.innerText = '';
+        } else {
+          out.innerText += `\nCommand not recognized. Type 'help'.`;
+        }
+        out.scrollTop = out.scrollHeight;
+      }
+    });
+
+    // XP on scroll tracking
+    let scrolledXp = false;
+    window.addEventListener('scroll', () => {
+      if (!scrolledXp && window.scrollY > 200) {
+        scrolledXp = true;
+        gainXP(15, "📜 Explorer Bonus: +15 XP for reading!");
+      }
+    });
+  </script>
+</body>
+</html>
