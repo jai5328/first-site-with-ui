@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="TeamPulse: a developer analytics dashboard for sprint, pull request and branch activity.">
+<title>TeamPulse – Developer Analytics Dashboard</title>
+<script>
+  // Apply saved/preferred theme before paint to avoid a flash
+  (function () {
+    try {
+      var saved = localStorage.getItem('tp-theme');
+      var dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (dark) document.documentElement.classList.add('dark');
+    } catch (e) {}
+  })();
+</script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config = { darkMode: 'class', theme: { extend: { fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] } } } };</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style type="text/tailwindcss">
+  /* Reusable components: form fields and buttons */
+  .field { @apply w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-600 focus:outline-none; }
+  .field[aria-invalid="true"] { @apply border-red-600 dark:border-red-400; }
+  .btn-primary { @apply inline-flex items-center justify-center gap-2 rounded-lg bg-blue-700 hover:bg-blue-800 text-white px-4 py-2 text-sm font-semibold focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 dark:focus:ring-offset-slate-900 focus:outline-none disabled:opacity-70 disabled:cursor-not-allowed; }
+  .btn-ghost { @apply inline-flex items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 px-4 py-2 text-sm font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 focus:ring-2 focus:ring-blue-600 focus:outline-none; }
+</style>
+<style>
+  /* Micro-interactions */
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .toast-in, dialog[open] { animation: rise .2s ease-out; }
+  dialog::backdrop { background: rgba(15, 23, 42, .6); }
+  .action, .btn-primary { transition: transform .15s, background-color .15s; }
+  .action:active, .btn-primary:active:not(:disabled) { transform: scale(.97); }
+  .spin { display: inline-block; width: 1em; height: 1em; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-800 dark:bg-slate-950 dark:text-slate-200 antialiased">
+<a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:bg-white focus:text-slate-900 focus:px-4 focus:py-2 focus:rounded focus:ring-2 focus:ring-blue-600 focus:outline-none">Skip to main content</a>
+
+<div class="lg:flex min-h-screen">
+
+  <!-- SIDEBAR -->
+  <aside class="lg:w-72 lg:shrink-0 bg-white dark:bg-slate-900 border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-800 lg:sticky lg:top-0 lg:h-screen lg:overflow-y-auto" aria-label="Sidebar">
+    <div class="p-5 sm:p-6 flex flex-col gap-6">
+      <div class="flex items-center gap-3">
+        <span class="grid place-items-center w-10 h-10 rounded-lg bg-blue-700 text-white" aria-hidden="true">
+          <svg viewBox="0 0 24 24" class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>
+        </span>
+        <span class="text-xl font-bold tracking-tight">TeamPulse</span>
+        <button type="button" id="menu-btn" aria-expanded="false" aria-controls="side-nav" class="btn-ghost ml-auto lg:hidden">Menu</button>
+      </div>
+
+      <nav aria-label="Primary" id="side-nav" class="hidden lg:block">
+        <ul class="flex flex-col gap-1">
+          <li><a href="#overview" aria-current="page" class="flex items-center justify-between gap-2 rounded-lg px-3 py-2.5 bg-blue-50 dark:bg-blue-950 text-blue-900 dark:text-blue-100 font-semibold focus:ring-2 focus:ring-blue-600 focus:outline-none">Dashboard Overview <span class="inline-flex items-center gap-1 text-xs font-bold text-emerald-800 dark:text-emerald-300"><span aria-hidden="true">●</span>Live</span></a></li>
+          <li><a href="#contributions" class="flex items-center justify-between gap-2 rounded-lg px-3 py-2.5 hover:bg-slate-100 dark:hover:bg-slate-800 focus:ring-2 focus:ring-blue-600 focus:outline-none">Contributions <span class="text-xs font-semibold rounded-full bg-slate-200 dark:bg-slate-700 px-2 py-0.5">4 <span class="sr-only">active</span><span aria-hidden="true"> active</span></span></a></li>
+          <li><a href="#branches" class="flex items-center justify-between gap-2 rounded-lg px-3 py-2.5 hover:bg-slate-100 dark:hover:bg-slate-800 focus:ring-2 focus:ring-blue-600 focus:outline-none">Branches <span class="text-xs font-semibold rounded-full bg-slate-200 dark:bg-slate-700 px-2 py-0.5">8</span></a></li>
+          <li><a href="#attention" class="flex items-center justify-between gap-2 rounded-lg px-3 py-2.5 hover:bg-slate-100 dark:hover:bg-slate-800 focus:ring-2 focus:ring-blue-600 focus:outline-none">Pull Requests <span class="text-xs font-semibold rounded-full bg-slate-200 dark:bg-slate-700 px-2 py-0.5">3 pending</span></a></li>
+          <li><a href="#milestones" class="flex items-center justify-between gap-2 rounded-lg px-3 py-2.5 hover:bg-slate-100 dark:hover:bg-slate-800 focus:ring-2 focus:ring-blue-600 focus:outline-none">Deadlines <span class="text-xs font-semibold rounded-full bg-amber-100 text-amber-900 dark:bg-amber-900 dark:text-amber-100 px-2 py-0.5" id="ms-badge">2 soon</span></a></li>
+          <li><a href="#settings" class="flex items-center gap-2 rounded-lg px-3 py-2.5 hover:bg-slate-100 dark:hover:bg-slate-800 focus:ring-2 focus:ring-blue-600 focus:outline-none">Settings</a></li>
+        </ul>
+      </nav>
+
+      <section aria-labelledby="sync-h" class="rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+        <h2 id="sync-h" class="text-sm font-semibold mb-2">Repository sync</h2>
+        <p id="sync-text" aria-live="polite" class="text-sm text-slate-700 dark:text-slate-300">api-service: Syncing repository history &amp; PR metrics... (68% complete)</p>
+        <div class="mt-3 h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="68" aria-label="api-service sync progress" id="sync-bar">
+          <div id="sync-fill" class="h-full bg-blue-700 dark:bg-blue-400 transition-all" style="width:68%"></div>
+        </div>
+      </section>
+    </div>
+  </aside>
+
+  <div class="flex-1 min-w-0">
+    <!-- HEADER -->
+    <header class="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-5 sm:px-8 py-5 flex flex-wrap items-center justify-between gap-4" id="overview">
+      <div>
+        <h1 class="text-2xl font-bold tracking-tight">Team overview</h1>
+        <p class="text-sm text-slate-600 dark:text-slate-400">Sprint 4 · frontend-app and api-service</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-4">
+        <div role="tablist" aria-label="Time range" id="range-tabs" class="inline-flex rounded-lg bg-slate-100 dark:bg-slate-800 p-1 gap-1">
+          <button role="tab" aria-selected="false" data-range="7d" class="tab">7d</button>
+          <button role="tab" aria-selected="true" data-range="30d" class="tab">30d</button>
+          <button role="tab" aria-selected="false" data-range="90d" class="tab">90d</button>
+          <button role="tab" aria-selected="false" data-range="sprint4" class="tab">Sprint 4</button>
+        </div>
+        <button id="theme-toggle" type="button" role="switch" aria-checked="false" class="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-800 focus:ring-2 focus:ring-blue-600 focus:outline-none">
+          <span aria-hidden="true" id="theme-icon">☾</span>
+          <span id="theme-label">Dark mode</span>
+          <span aria-hidden="true" class="relative inline-block w-9 h-5 rounded-full bg-slate-300 dark:bg-blue-500 transition-colors"><span class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform dark:translate-x-4"></span></span>
+        </button>
+      </div>
+    </header>
+
+    <main id="main" class="p-5 sm:p-8 flex flex-col gap-8" tabindex="-1">
+
+      <!-- METRICS -->
+      <section aria-labelledby="metrics-h">
+        <h2 id="metrics-h" class="sr-only">Key metrics</h2>
+        <p class="sr-only" aria-live="polite" id="range-announce"></p>
+        <ul class="grid gap-5 sm:grid-cols-2 xl:grid-cols-4" id="metrics"></ul>
+      </section>
+
+      <!-- AI SUMMARY -->
+      <section aria-labelledby="ai-h" class="rounded-2xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950 p-6">
+        <div role="alert" class="flex gap-4">
+          <span aria-hidden="true" class="text-2xl">✦</span>
+          <div>
+            <h2 id="ai-h" class="text-lg font-semibold text-blue-950 dark:text-blue-100">AI sprint summary</h2>
+            <p class="mt-2 text-blue-950 dark:text-blue-100 max-w-3xl">Team velocity increased by 14% this sprint. There is a PR review bottleneck around api-service with 2 blockers. <strong>Resolve PR #84 before standup.</strong></p>
+          </div>
+        </div>
+      </section>
+
+      <!-- NEEDS ATTENTION -->
+      <section aria-labelledby="att-h" id="attention" class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6">
+        <h2 id="att-h" class="text-lg font-semibold">Needs attention</h2>
+        <ul class="mt-5 grid gap-4 lg:grid-cols-3">
+          <li class="rounded-xl border border-slate-200 dark:border-slate-700 p-5 flex flex-col gap-3">
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-semibold">PR #84</span>
+              <span class="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-950 dark:bg-amber-900 dark:text-amber-50 px-2.5 py-0.5 text-xs font-bold"><span aria-hidden="true">⏳</span>Waiting on review</span>
+            </div>
+            <p class="font-mono text-sm break-all">fix/login-bug</p>
+            <p class="text-sm text-slate-700 dark:text-slate-300">Waiting on review for 2.4 days. Assigned: Ravi.</p>
+            <button type="button" data-toast="Reminder sent to Ravi for PR #84." class="action mt-auto self-start rounded-lg bg-blue-700 hover:bg-blue-800 text-white px-4 py-2 text-sm font-semibold focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 dark:focus:ring-offset-slate-900 focus:outline-none">Nudge reviewer<span class="sr-only"> for PR #84</span></button>
+          </li>
+          <li class="rounded-xl border border-slate-200 dark:border-slate-700 p-5 flex flex-col gap-3">
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-semibold">PR #91</span>
+              <span class="inline-flex items-center gap-1 rounded-full bg-red-100 text-red-950 dark:bg-red-900 dark:text-red-50 px-2.5 py-0.5 text-xs font-bold"><span aria-hidden="true">✖</span>Failing CI</span>
+            </div>
+            <p class="font-mono text-sm break-all">feature/auth-flow</p>
+            <p class="text-sm text-slate-700 dark:text-slate-300">CI checks failing. Author: Aisha.</p>
+            <button type="button" data-toast="Opening CI logs for PR #91…" class="action mt-auto self-start rounded-lg bg-blue-700 hover:bg-blue-800 text-white px-4 py-2 text-sm font-semibold focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 dark:focus:ring-offset-slate-900 focus:outline-none">Inspect CI<span class="sr-only"> for PR #91</span></button>
+          </li>
+          <li class="rounded-xl border border-slate-200 dark:border-slate-700 p-5 flex flex-col gap-3">
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-semibold">PR #78</span>
+              <span class="inline-flex items-center gap-1 rounded-full bg-orange-100 text-orange-950 dark:bg-orange-900 dark:text-orange-50 px-2.5 py-0.5 text-xs font-bold"><span aria-hidden="true">⚠</span>Merge conflict</span>
+            </div>
+            <p class="font-mono text-sm break-all">chore/ci-update</p>
+            <p class="text-sm text-slate-700 dark:text-slate-300">Merge conflict. Author: Meera.</p>
+            <button type="button" data-toast="Launching Web IDE to resolve PR #78…" class="action mt-auto self-start rounded-lg bg-blue-700 hover:bg-blue-800 text-white px-4 py-2 text-sm font-semibold focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 dark:focus:ring-offset-slate-900 focus:outline-none">Resolve in Web IDE<span class="sr-only"> for PR #78</span></button>
+          </li>
+        </ul>
+      </section>
+
+      <div class="grid gap-8 xl:grid-cols-3" id="contributions">
+        <!-- HEATMAP -->
+        <section aria-labelledby="heat-h" class="xl:col-span-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6">
+          <div class="flex flex-wrap items-center justify-between gap-4">
+            <h2 id="heat-h" class="text-lg font-semibold">Team contribution heatmap</h2>
+            <div role="tablist" aria-label="Repository filter" id="heat-tabs" class="inline-flex rounded-lg bg-slate-100 dark:bg-slate-800 p-1 gap-1">
+              <button role="tab" aria-selected="true" data-seg="all" class="tab">All</button>
+              <button role="tab" aria-selected="false" data-seg="frontend" class="tab">frontend-app</button>
+              <button role="tab" aria-selected="false" data-seg="api" class="tab">api-service</button>
+            </div>
+          </div>
+          <p class="mt-2 text-sm text-slate-600 dark:text-slate-400">Commits per day, weeks 37–41. Darker cells mean more activity; each cell also shows its number.</p>
+          <div class="mt-5 overflow-x-auto">
+            <table class="w-full text-center text-sm border-separate border-spacing-1" id="heat-table">
+              <caption class="sr-only" id="heat-caption">Commits per day by week for all repositories</caption>
+              <thead><tr><th scope="col" class="text-left font-semibold pr-2">Week</th><th scope="col">Mon</th><th scope="col">Tue</th><th scope="col">Wed</th><th scope="col">Thu</th><th scope="col">Fri</th><th scope="col">Sat</th><th scope="col">Sun</th></tr></thead>
+              <tbody id="heat-body"></tbody>
+            </table>
+          </div>
+          <p class="mt-4 text-xs text-slate-600 dark:text-slate-400" aria-hidden="true">Less <span class="inline-block w-4 h-4 align-middle rounded bg-blue-100 dark:bg-blue-950 border border-slate-300 dark:border-slate-600"></span> <span class="inline-block w-4 h-4 align-middle rounded bg-blue-300 dark:bg-blue-800"></span> <span class="inline-block w-4 h-4 align-middle rounded bg-blue-500 dark:bg-blue-600"></span> <span class="inline-block w-4 h-4 align-middle rounded bg-blue-800 dark:bg-blue-400"></span> More</p>
+        </section>
+
+        <!-- MEMBERS -->
+        <section aria-labelledby="mem-h" class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6">
+          <h2 id="mem-h" class="text-lg font-semibold">Contributions by member</h2>
+          <ul class="mt-5 flex flex-col gap-5" id="members"></ul>
+        </section>
+      </div>
+
+      <!-- BRANCHES -->
+      <section aria-labelledby="br-h" id="branches" class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <h2 id="br-h" class="text-lg font-semibold">Active branches</h2>
+          <div role="tablist" aria-label="Branch filter" id="br-tabs" class="inline-flex rounded-lg bg-slate-100 dark:bg-slate-800 p-1 gap-1">
+            <button role="tab" aria-selected="true" data-f="all" class="tab">All</button>
+            <button role="tab" aria-selected="false" data-f="active" class="tab">Active</button>
+            <button role="tab" aria-selected="false" data-f="stale" class="tab">Stale</button>
+          </div>
+        </div>
+        <div class="mt-4"><label for="br-q" class="sr-only">Search branches or authors</label><input id="br-q" type="search" placeholder="Search branches or authors…" class="field sm:max-w-xs" autocomplete="off"></div>
+        <p class="sr-only" aria-live="polite" id="br-announce"></p>
+        <div class="mt-5 overflow-x-auto">
+          <table class="w-full text-left text-sm min-w-[40rem]">
+            <caption class="sr-only">Branches with author, commits ahead and behind main, and current state</caption>
+            <thead class="border-b border-slate-300 dark:border-slate-700">
+              <tr><th scope="col" class="py-3 pr-4 font-semibold">Branch</th><th scope="col" class="py-3 pr-4 font-semibold">Author</th><th scope="col" class="py-3 pr-4 font-semibold">Ahead / behind</th><th scope="col" class="py-3 font-semibold">State</th></tr>
+            </thead>
+            <tbody id="br-body" class="divide-y divide-slate-200 dark:divide-slate-800"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- MILESTONES -->
+      <section aria-labelledby="ms-h" id="milestones" class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h2 id="ms-h" class="text-lg font-semibold">Upcoming milestones</h2>
+          <button type="button" id="ms-open" class="btn-primary" aria-haspopup="dialog">+ New milestone</button>
+        </div>
+        <ul class="mt-5 grid gap-5 md:grid-cols-2" id="ms-list"></ul>
+      </section>
+
+      <section id="settings" aria-labelledby="set-h" class="sr-only"><h2 id="set-h">Settings</h2><p>Use the theme switch in the page header to change appearance.</p></section>
+    </main>
+  </div>
+</div>
+
+<!-- NEW MILESTONE DIALOG -->
+<dialog id="ms-modal" aria-labelledby="ms-modal-h" class="m-auto w-[min(32rem,calc(100%-2rem))] rounded-2xl p-0 bg-white text-slate-800 dark:bg-slate-900 dark:text-slate-200 border border-slate-200 dark:border-slate-700 shadow-2xl">
+  <form id="ms-form" novalidate class="p-6 flex flex-col gap-5">
+    <div class="flex items-start justify-between gap-4">
+      <h2 id="ms-modal-h" class="text-lg font-semibold">New milestone</h2>
+      <button type="button" id="ms-close" aria-label="Close dialog" class="rounded px-2 font-bold hover:bg-slate-100 dark:hover:bg-slate-800 focus:ring-2 focus:ring-blue-600 focus:outline-none"><span aria-hidden="true">✕</span></button>
+    </div>
+    <div>
+      <label for="ms-title" class="block text-sm font-semibold mb-1">Name <span class="text-red-700 dark:text-red-300" aria-hidden="true">*</span></label>
+      <input id="ms-title" class="field" type="text" required maxlength="80" autocomplete="off" aria-describedby="ms-title-err" aria-invalid="false">
+      <p id="ms-title-err" class="mt-1 text-sm font-medium text-red-700 dark:text-red-300" hidden></p>
+    </div>
+    <div class="grid gap-5 sm:grid-cols-2">
+      <div>
+        <label for="ms-due" class="block text-sm font-semibold mb-1">Due date <span class="text-red-700 dark:text-red-300" aria-hidden="true">*</span></label>
+        <input id="ms-due" class="field" type="date" required aria-describedby="ms-due-err" aria-invalid="false">
+        <p id="ms-due-err" class="mt-1 text-sm font-medium text-red-700 dark:text-red-300" hidden></p>
+      </div>
+      <div>
+        <label for="ms-owner" class="block text-sm font-semibold mb-1">Owner <span class="text-red-700 dark:text-red-300" aria-hidden="true">*</span></label>
+        <select id="ms-owner" class="field" required aria-describedby="ms-owner-err" aria-invalid="false">
+          <option value="">Choose…</option><option>Aisha</option><option>Ravi</option><option>Meera</option><option>Daniel</option>
+        </select>
+        <p id="ms-owner-err" class="mt-1 text-sm font-medium text-red-700 dark:text-red-300" hidden></p>
+      </div>
+    </div>
+    <div class="flex justify-end gap-3">
+      <button type="button" id="ms-cancel" class="btn-ghost">Cancel</button>
+      <button type="submit" id="ms-submit" class="btn-primary"><span id="ms-spin" class="spin" hidden aria-hidden="true"></span><span id="ms-submit-t">Create milestone</span></button>
+    </div>
+  </form>
+</dialog>
+
+<!-- TOASTS -->
+<div id="toasts" aria-live="polite" aria-atomic="false" class="fixed bottom-4 right-4 left-4 sm:left-auto sm:w-96 z-50 flex flex-col gap-2"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- Tabs (shared) ---------- */
+  var ACTIVE = ['bg-white','text-blue-900','shadow','dark:bg-slate-600','dark:text-white'];
+  var IDLE = ['text-slate-700','hover:bg-slate-200','dark:text-slate-300','dark:hover:bg-slate-700'];
+  var BASE = ['px-3','py-1.5','rounded-md','text-sm','font-semibold','focus:ring-2','focus:ring-blue-600','focus:outline-none'];
+
+  function paint(tab, on) {
+    tab.className = '';
+    BASE.forEach(function (c) { tab.classList.add(c); });
+    (on ? ACTIVE : IDLE).forEach(function (c) { tab.classList.add(c); });
+    tab.setAttribute('aria-selected', on ? 'true' : 'false');
+    tab.tabIndex = on ? 0 : -1;
+  }
+  function initTabs(list, onSelect) {
+    var tabs = Array.prototype.slice.call(list.querySelectorAll('[role="tab"]'));
+    function select(tab, focus) {
+      tabs.forEach(function (t) { paint(t, t === tab); });
+      if (focus) tab.focus();
+      onSelect(tab);
+    }
+    tabs.forEach(function (tab, i) {
+      tab.addEventListener('click', function () { select(tab, false); });
+      tab.addEventListener('keydown', function (e) {
+        var n = null;
+        if (e.key === 'ArrowRight') n = tabs[(i + 1) % tabs.length];
+        else if (e.key === 'ArrowLeft') n = tabs[(i - 1 + tabs.length) % tabs.length];
+        else if (e.key === 'Home') n = tabs[0];
+        else if (e.key === 'End') n = tabs[tabs.length - 1];
+        if (n) { e.preventDefault(); select(n, true); }
+      });
+    });
+    var current = tabs.filter(function (t) { return t.getAttribute('aria-selected') === 'true'; })[0] || tabs[0];
+    tabs.forEach(function (t) { paint(t, t === current); });
+  }
+
+  /* ---------- Metrics ---------- */
+  var RANGES = {
+    '7d':     { label: 'Last 7 days',  c:[38,'+6%'],   p:[6,'+3%','3.9h'],   r:[14,'+10%','91%'], o:[7,2,3] },
+    '30d':    { label: 'Last 30 days', c:[142,'+18%'], p:[24,'+8%','4.2h'], r:[56,'+32%','94%'], o:[7,2,3] },
+    '90d':    { label: 'Last 90 days', c:[401,'+11%'], p:[71,'+5%','4.6h'], r:[158,'+21%','92%'], o:[7,2,3] },
+    'sprint4':{ label: 'Sprint 4',     c:[96,'+14%'],  p:[17,'+9%','4.0h'], r:[39,'+25%','93%'], o:[7,2,3] }
+  };
+  function card(title, big, body) {
+    return '<li class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">' +
+      '<h3 class="text-sm font-semibold text-slate-700 dark:text-slate-300">' + title + '</h3>' +
+      '<p class="mt-2 text-4xl font-bold tracking-tight">' + big + '</p>' + body + '</li>';
+  }
+  function trend(t) {
+    return '<p class="mt-3 text-sm font-semibold text-emerald-800 dark:text-emerald-300"><span aria-hidden="true">▲ </span>' + t +
+      '<span class="sr-only"> increase compared with the previous period</span></p>';
+  }
+  function renderMetrics(key) {
+    var d = RANGES[key];
+    document.getElementById('metrics').innerHTML =
+      card('Commits', d.c[0], trend(d.c[1])) +
+      card('PRs merged', d.p[0], trend(d.p[1]) + '<p class="text-sm text-slate-700 dark:text-slate-300">' + d.p[2] + ' median time to merge</p>') +
+      card('Reviews given', d.r[0], trend(d.r[1]) + '<p class="text-sm text-slate-700 dark:text-slate-300">' + d.r[2] + ' response rate</p>') +
+      card('Open PRs', d.o[0] + ' <span class="text-base font-medium text-slate-600 dark:text-slate-400">total</span>',
+        '<p class="mt-3 text-sm text-slate-700 dark:text-slate-300">' + d.o[1] + ' pending</p>' +
+        '<p class="mt-1 inline-flex items-center gap-1 text-sm font-bold text-red-800 dark:text-red-300"><span aria-hidden="true">⚠</span>' + d.o[2] + ' require urgent action</p>');
+    document.getElementById('range-announce').textContent = 'Showing metrics for ' + d.label + '.';
+  }
+  initTabs(document.getElementById('range-tabs'), function (t) { renderMetrics(t.dataset.range); });
+  renderMetrics('30d');
+
+  /* ---------- Heatmap ---------- */
+  var HEAT = {
+    all:      { name:'all repositories', w:{37:[4,9,12,10,8,1,0],38:[6,11,14,13,9,2,1],39:[5,10,16,12,11,0,0],40:[7,13,15,17,12,3,1],41:[8,12,18,14,10,2,0]} },
+    frontend: { name:'frontend-app',     w:{37:[2,5,7,6,4,1,0],38:[3,6,8,7,5,1,0],39:[2,6,9,7,6,0,0],40:[4,7,8,9,7,2,1],41:[4,7,10,8,5,1,0]} },
+    api:      { name:'api-service',      w:{37:[2,4,5,4,4,0,0],38:[3,5,6,6,4,1,1],39:[3,4,7,5,5,0,0],40:[3,6,7,8,5,1,0],41:[4,5,8,6,5,1,0]} }
+  };
+  function level(n) { return n < 3 ? 0 : n < 7 ? 1 : n < 12 ? 2 : 3; }
+  var SHADE = [
+    'bg-blue-100 text-slate-900 dark:bg-blue-950 dark:text-slate-100',
+    'bg-blue-300 text-slate-900 dark:bg-blue-800 dark:text-white',
+    'bg-blue-500 text-white dark:bg-blue-600 dark:text-white',
+    'bg-blue-800 text-white dark:bg-blue-400 dark:text-slate-950'
+  ];
+  var DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  function renderHeat(seg) {
+    var s = HEAT[seg], html = '';
+    Object.keys(s.w).forEach(function (wk) {
+      html += '<tr><th scope="row" class="text-left font-semibold pr-2 whitespace-nowrap">Wk ' + wk + '</th>';
+      s.w[wk].forEach(function (n, i) {
+        html += '<td class="rounded-md py-2 font-semibold ' + SHADE[level(n)] + '"><span aria-hidden="true">' + n + '</span><span class="sr-only">' + n + ' commits on ' + DAYS[i] + '</span></td>';
+      });
+      html += '</tr>';
+    });
+    document.getElementById('heat-body').innerHTML = html;
+    document.getElementById('heat-caption').textContent = 'Commits per day by week for ' + s.name;
+  }
+  initTabs(document.getElementById('heat-tabs'), function (t) { renderHeat(t.dataset.seg); });
+  renderHeat('all');
+
+  /* ---------- Members ---------- */
+  var MEMBERS = [
+    { n:'Aisha', role:'Tech Lead', c:48, p:12, r:22 },
+    { n:'Ravi', role:'', c:39, p:8, r:16 },
+    { n:'Meera', role:'', c:34, p:7, r:11 },
+    { n:'Daniel', role:'', c:21, p:4, r:7 }
+  ];
+  document.getElementById('members').innerHTML = MEMBERS.map(function (m) {
+    var pct = Math.round(m.c / 48 * 100);
+    return '<li><div class="flex items-baseline justify-between gap-2"><span class="font-semibold">' + m.n +
+      (m.role ? ' <span class="text-xs font-medium rounded-full bg-slate-200 dark:bg-slate-700 px-2 py-0.5 align-middle">' + m.role + '</span>' : '') + '</span></div>' +
+      '<p class="mt-1 text-sm text-slate-700 dark:text-slate-300">' + m.c + ' commits · ' + m.p + ' PRs · ' + m.r + ' reviews</p>' +
+      '<div class="mt-2 h-2 rounded-full bg-slate-200 dark:bg-slate-700" aria-hidden="true"><div class="h-full rounded-full bg-blue-700 dark:bg-blue-400" style="width:' + pct + '%"></div></div></li>';
+  }).join('');
+
+  /* ---------- Branches ---------- */
+  var STATE = {
+    Active:   ['bg-blue-100 text-blue-950 dark:bg-blue-900 dark:text-blue-50','●'],
+    Review:   ['bg-amber-100 text-amber-950 dark:bg-amber-900 dark:text-amber-50','◐'],
+    Conflict: ['bg-red-100 text-red-950 dark:bg-red-900 dark:text-red-50','⚠'],
+    Merged:   ['bg-emerald-100 text-emerald-950 dark:bg-emerald-900 dark:text-emerald-50','✔']
+  };
+  var BRANCHES = [
+    { b:'feature/auth-flow', a:'Aisha', ah:9, bh:2, s:'Active', stale:false },
+    { b:'fix/login-bug', a:'Ravi', ah:3, bh:1, s:'Review', stale:false },
+    { b:'chore/ci-update', a:'Meera', ah:5, bh:7, s:'Conflict', stale:false },
+    { b:'feature/dashboard-ui', a:'Daniel', ah:12, bh:0, s:'Active', stale:false },
+    { b:'feature/api-pagination', a:'Ravi', ah:6, bh:4, s:'Review', stale:false },
+    { b:'fix/typo-readme', a:'Meera', ah:1, bh:0, s:'Merged', stale:true },
+    { b:'experiment/graphql', a:'Daniel', ah:4, bh:31, s:'Active', stale:true },
+    { b:'feature/old-onboarding', a:'Aisha', ah:2, bh:45, s:'Merged', stale:true }
+  ];
+  var brF = 'all';
+  function renderBranches() {
+    var q = document.getElementById('br-q').value.trim().toLowerCase();
+    var rows = BRANCHES.filter(function (x) {
+      var okFilter = brF === 'all' || (brF === 'stale' ? x.stale : !x.stale);
+      return okFilter && (x.b + ' ' + x.a).toLowerCase().indexOf(q) !== -1;
+    });
+    document.getElementById('br-body').innerHTML = !rows.length
+      ? '<tr><td colspan="4" class="py-8 text-center text-slate-600 dark:text-slate-400">No branches match your search.</td></tr>'
+      : rows.map(function (x) {
+      var st = STATE[x.s];
+      return '<tr><th scope="row" class="py-3 pr-4 font-mono font-medium break-all">' + x.b + '</th>' +
+        '<td class="py-3 pr-4">' + x.a + '</td>' +
+        '<td class="py-3 pr-4"><span aria-hidden="true">↑' + x.ah + ' ↓' + x.bh + '</span><span class="sr-only">' + x.ah + ' commits ahead, ' + x.bh + ' behind</span></td>' +
+        '<td class="py-3"><span class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold ' + st[0] + '"><span aria-hidden="true">' + st[1] + '</span>' + x.s + '</span>' +
+        (x.stale ? ' <span class="text-xs text-slate-600 dark:text-slate-400">(stale)</span>' : '') + '</td></tr>';
+    }).join('');
+    document.getElementById('br-announce').textContent = 'Showing ' + rows.length + ' branches.';
+  }
+  initTabs(document.getElementById('br-tabs'), function (t) { brF = t.dataset.f; renderBranches(); });
+  document.getElementById('br-q').addEventListener('input', renderBranches);
+  renderBranches();
+
+  /* ---------- Toasts ---------- */
+  var toasts = document.getElementById('toasts');
+  function toast(msg) {
+    var el = document.createElement('div');
+    el.setAttribute('role', 'status');
+    el.className = 'toast-in flex items-start justify-between gap-3 rounded-lg bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 px-4 py-3 shadow-lg text-sm font-medium';
+    var span = document.createElement('span'); span.textContent = msg;
+    var close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'shrink-0 rounded px-1 font-bold focus:ring-2 focus:ring-blue-400 focus:outline-none';
+    close.innerHTML = '<span aria-hidden="true">✕</span><span class="sr-only">Dismiss notification</span>';
+    close.addEventListener('click', function () { el.remove(); });
+    el.appendChild(span); el.appendChild(close);
+    toasts.appendChild(el);
+    setTimeout(function () { if (el.parentNode) el.remove(); }, 5000);
+  }
+  // Action buttons show a short loading state before confirming with a toast
+  document.querySelectorAll('.action').forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (b.disabled) return;
+      var orig = b.innerHTML;
+      b.disabled = true;
+      b.classList.add('opacity-70');
+      b.innerHTML = '<span class="spin" aria-hidden="true"></span> Working…';
+      setTimeout(function () {
+        b.innerHTML = orig; b.disabled = false; b.classList.remove('opacity-70');
+        toast(b.dataset.toast);
+      }, 900);
+    });
+  });
+
+  /* ---------- Mobile menu ---------- */
+  var menuBtn = document.getElementById('menu-btn'), sideNav = document.getElementById('side-nav');
+  menuBtn.addEventListener('click', function () {
+    var open = sideNav.classList.toggle('hidden') === false;
+    menuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  sideNav.addEventListener('click', function (e) {
+    if (e.target.closest('a') && window.innerWidth < 1024) { sideNav.classList.add('hidden'); menuBtn.setAttribute('aria-expanded', 'false'); }
+  });
+
+  /* ---------- Milestones + dialog with validation ---------- */
+  function esc(s) { return s.replace(/[&<>"']/g, function (c) { return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]; }); }
+  var today = new Date().toLocaleDateString('en-CA');           // YYYY-MM-DD, local time
+  var midnight = new Date(); midnight.setHours(0, 0, 0, 0);
+  function inDays(n) { return new Date(Date.now() + n * 864e5).toLocaleDateString('en-CA'); }
+  function daysUntil(iso) { return Math.round((new Date(iso + 'T00:00:00') - midnight) / 864e5); }
+  var MS_STATE = {
+    ok:   ['bg-emerald-100 text-emerald-950 dark:bg-emerald-900 dark:text-emerald-50', '✔', 'On track', 'bg-emerald-700 dark:bg-emerald-400'],
+    risk: ['bg-red-100 text-red-950 dark:bg-red-900 dark:text-red-50', '⚠', 'At risk', 'bg-red-700 dark:bg-red-400'],
+    plan: ['bg-blue-100 text-blue-950 dark:bg-blue-900 dark:text-blue-50', '◔', 'Planned', 'bg-blue-700 dark:bg-blue-400']
+  };
+  var MS = [
+    { t: 'MVP Demo', due: inDays(6), pct: 72, st: 'ok', owner: '' },
+    { t: 'Final Submission & Review', due: inDays(21), pct: 35, st: 'risk', owner: '' }
+  ];
+  function renderMs() {
+    MS.sort(function (a, b) { return a.due < b.due ? -1 : 1; });
+    document.getElementById('ms-list').innerHTML = MS.map(function (m) {
+      var n = daysUntil(m.due), st = MS_STATE[m.st];
+      var when = n === 0 ? 'Due today' : n === 1 ? 'Due tomorrow' : 'Due in ' + n + ' days';
+      return '<li class="rounded-xl border border-slate-200 dark:border-slate-700 p-5 transition hover:shadow-md">' +
+        '<div class="flex flex-wrap items-center justify-between gap-2"><h3 class="font-semibold">' + esc(m.t) + '</h3>' +
+        '<span class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold ' + st[0] + '"><span aria-hidden="true">' + st[1] + '</span>' + st[2] + '</span></div>' +
+        '<p class="mt-1 text-sm text-slate-700 dark:text-slate-300">' + when + ' · ' + m.pct + '% complete' + (m.owner ? ' · Owner: ' + esc(m.owner) : '') + '</p>' +
+        '<div class="mt-3 h-2.5 rounded-full bg-slate-200 dark:bg-slate-700" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + m.pct + '" aria-label="' + esc(m.t) + ' progress"><div class="h-full rounded-full transition-all ' + st[3] + '" style="width:' + m.pct + '%"></div></div></li>';
+    }).join('');
+    document.getElementById('ms-badge').textContent = MS.filter(function (m) { return daysUntil(m.due) <= 30; }).length + ' soon';
+  }
+  renderMs();
+
+  var dlg = document.getElementById('ms-modal'), form = document.getElementById('ms-form');
+  var F = {
+    title: { el: document.getElementById('ms-title'), check: function (v) { v = v.trim(); return !v ? 'Enter a milestone name.' : v.length < 3 ? 'Use at least 3 characters.' : ''; } },
+    due:   { el: document.getElementById('ms-due'),   check: function (v) { return !v ? 'Pick a due date.' : v < today ? 'The due date can\u2019t be in the past.' : ''; } },
+    owner: { el: document.getElementById('ms-owner'), check: function (v) { return v ? '' : 'Choose an owner.'; } }
+  };
+  F.due.el.min = today;
+  function check(k) {
+    var msg = F[k].check(F[k].el.value), p = document.getElementById('ms-' + k + '-err');
+    p.textContent = msg; p.hidden = !msg;
+    F[k].el.setAttribute('aria-invalid', msg ? 'true' : 'false');
+    return !msg;
+  }
+  Object.keys(F).forEach(function (k) {
+    F[k].el.addEventListener('blur', function () { check(k); });
+    F[k].el.addEventListener('input', function () { if (F[k].el.getAttribute('aria-invalid') === 'true') check(k); });
+  });
+  document.getElementById('ms-open').addEventListener('click', function () { dlg.showModal(); F.title.el.focus(); });
+  ['ms-close', 'ms-cancel'].forEach(function (id) { document.getElementById(id).addEventListener('click', function () { dlg.close(); }); });
+  dlg.addEventListener('click', function (e) { if (e.target === dlg) dlg.close(); });   // click on backdrop
+  dlg.addEventListener('close', function () {
+    form.reset();
+    Object.keys(F).forEach(function (k) { document.getElementById('ms-' + k + '-err').hidden = true; F[k].el.setAttribute('aria-invalid', 'false'); });
+  });
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var bad = Object.keys(F).filter(function (k) { return !check(k); });
+    if (bad.length) { F[bad[0]].el.focus(); return; }
+    var btn = document.getElementById('ms-submit');
+    btn.disabled = true;
+    document.getElementById('ms-spin').hidden = false;
+    document.getElementById('ms-submit-t').textContent = 'Creating…';
+    setTimeout(function () {                       // simulated network request
+      var name = F.title.el.value.trim();
+      MS.push({ t: name, due: F.due.el.value, pct: 0, st: 'plan', owner: F.owner.el.value });
+      renderMs();
+      btn.disabled = false;
+      document.getElementById('ms-spin').hidden = true;
+      document.getElementById('ms-submit-t').textContent = 'Create milestone';
+      dlg.close();
+      toast('Milestone \u201c' + name + '\u201d created.');
+    }, 1200);
+  });
+
+  /* ---------- Theme ---------- */
+  var root = document.documentElement;
+  var sw = document.getElementById('theme-toggle');
+  function syncTheme() {
+    var dark = root.classList.contains('dark');
+    sw.setAttribute('aria-checked', dark ? 'true' : 'false');
+    document.getElementById('theme-label').textContent = dark ? 'Light mode' : 'Dark mode';
+    document.getElementById('theme-icon').textContent = dark ? '☀' : '☾';
+  }
+  sw.addEventListener('click', function () {
+    var dark = root.classList.toggle('dark');
+    try { localStorage.setItem('tp-theme', dark ? 'dark' : 'light'); } catch (e) {}
+    syncTheme();
+  });
+  syncTheme();
+
+  /* ---------- Sync progress (simulated) ---------- */
+  var pct = 68;
+  var txt = document.getElementById('sync-text'), fill = document.getElementById('sync-fill'), bar = document.getElementById('sync-bar');
+  var timer = setInterval(function () {
+    pct = Math.min(100, pct + 8);
+    fill.style.width = pct + '%';
+    bar.setAttribute('aria-valuenow', pct);
+    if (pct >= 100) {
+      txt.textContent = 'api-service: Sync complete. Repository history & PR metrics are up to date.';
+      clearInterval(timer);
+    } else {
+      txt.textContent = 'api-service: Syncing repository history & PR metrics... (' + pct + '% complete)';
+    }
+  }, 6000);
+})();
+</script>
+</body>
+</html>
